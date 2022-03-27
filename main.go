@@ -33,7 +33,11 @@ func main() {
 
 var handlers = map[string]func(conn net.Conn, message string, args []string){
 	"ping":   Ping,
+	"set":    Set,
 }
+
+var db = map[string]string{}
+
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
@@ -69,6 +73,19 @@ func Ping(conn net.Conn, msg string, args []string) {
 		conn.Write([]byte(args[0] + "\n"))
 	} else {
 		wrongNumberArgs(conn, "ping")
+	}
+}
+
+// Set `key` to hold the string value. If `key` already holds a value, it is overwritten,
+// regardless of its type. Any previous time to live associated with the `key` is
+// discarded on successful `SET` operation.
+// https://redis.io/commands/set/
+func Set(conn net.Conn, msg string, args []string) {
+	if len(args) != 2 {
+		wrongNumberArgs(conn, "set")
+	} else {
+		db[args[0]] = args[1]
+		conn.Write([]byte("OK\n"))
 	}
 }
 
