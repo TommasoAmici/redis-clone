@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -72,11 +71,11 @@ func handleConnection(conn net.Conn) {
 // https://redis.io/commands/ping/
 func Ping(conn net.Conn, msg string, args []string) {
 	if len(args) == 0 {
-		conn.Write([]byte("PONG\n"))
+		simpleStringRESP(conn, "PONG")
 	} else if len(args) == 1 {
-		conn.Write([]byte(args[0] + "\n"))
+		simpleStringRESP(conn, args[0])
 	} else {
-		wrongNumberArgs(conn, "ping")
+		wrongNumArgsRESP(conn, "ping")
 	}
 }
 
@@ -86,10 +85,10 @@ func Ping(conn net.Conn, msg string, args []string) {
 // https://redis.io/commands/set/
 func Set(conn net.Conn, msg string, args []string) {
 	if len(args) != 2 {
-		wrongNumberArgs(conn, "set")
+		wrongNumArgsRESP(conn, "set")
 	} else {
 		db[args[0]] = args[1]
-		OKReply(conn)
+		okRESP(conn)
 	}
 }
 
@@ -99,13 +98,13 @@ func Set(conn net.Conn, msg string, args []string) {
 // https://redis.io/commands/get/
 func Get(conn net.Conn, msg string, args []string) {
 	if len(args) != 1 {
-		wrongNumberArgs(conn, "get")
+		wrongNumArgsRESP(conn, "get")
 	} else {
 		val, ok := db[args[0]]
 		if ok {
-			conn.Write([]byte(val + "\n"))
+			bulkStringRESP(conn, val)
 		} else {
-			conn.Write([]byte("-1\n"))
+			nullBulkRESP(conn)
 		}
 	}
 }
@@ -116,7 +115,7 @@ func Get(conn net.Conn, msg string, args []string) {
 // https://redis.io/commands/exists/
 func Exists(conn net.Conn, msg string, args []string) {
 	if len(args) == 0 {
-		wrongNumberArgs(conn, "exists")
+		wrongNumArgsRESP(conn, "exists")
 	} else {
 		count := 0
 		for _, arg := range args {
@@ -124,7 +123,7 @@ func Exists(conn net.Conn, msg string, args []string) {
 				count++
 			}
 		}
-		intReply(conn, count)
+		intRESP(conn, count)
 	}
 }
 
@@ -133,7 +132,7 @@ func Exists(conn net.Conn, msg string, args []string) {
 // https://redis.io/commands/del/
 func Del(conn net.Conn, msg string, args []string) {
 	if len(args) == 0 {
-		wrongNumberArgs(conn, "del")
+		wrongNumArgsRESP(conn, "del")
 	} else {
 		count := 0
 		for _, arg := range args {
@@ -142,24 +141,12 @@ func Del(conn net.Conn, msg string, args []string) {
 				count++
 			}
 		}
-		intReply(conn, count)
+		intRESP(conn, count)
 	}
 }
 
 // Quit closes the connection. https://redis.io/commands/quit/
 func Quit(conn net.Conn, msg string, args []string) {
-	OKReply(conn)
+	okRESP(conn)
 	conn.Close()
-}
-
-func intReply(conn net.Conn, n int) {
-	conn.Write([]byte(fmt.Sprintf("%d\n", n)))
-}
-
-func OKReply(conn net.Conn) {
-	conn.Write([]byte("OK\n"))
-}
-
-func wrongNumberArgs(conn net.Conn, name string) {
-	conn.Write([]byte("ERR wrong number of arguments for '" + name + "' command\n"))
 }
