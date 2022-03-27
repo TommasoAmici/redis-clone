@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -32,8 +31,9 @@ func main() {
 }
 
 var handlers = map[string]func(conn net.Conn, message string, args []string){
-	"ping":   Ping,
-	"set":    Set,
+	"ping": Ping,
+	"set":  Set,
+	"get":  Get,
 }
 
 var db = map[string]string{}
@@ -86,6 +86,23 @@ func Set(conn net.Conn, msg string, args []string) {
 	} else {
 		db[args[0]] = args[1]
 		conn.Write([]byte("OK\n"))
+	}
+}
+
+// Get the value of `key`. If the `key`` does not exist the special value `nil` is returned.
+// An error is returned if the value stored at `key` is not a string, because `GET` only
+// handles string values.
+// https://redis.io/commands/get/
+func Get(conn net.Conn, msg string, args []string) {
+	if len(args) != 1 {
+		wrongNumberArgs(conn, "get")
+	} else {
+		val, ok := db[args[0]]
+		if ok {
+			conn.Write([]byte(val + "\n"))
+		} else {
+			conn.Write([]byte("-1\n"))
+		}
 	}
 }
 
