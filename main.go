@@ -36,6 +36,7 @@ var handlers = map[string]func(conn net.Conn, message string, args []string){
 	"set":    Set,
 	"get":    Get,
 	"exists": Exists,
+	"quit":   Quit,
 }
 
 var db = map[string]string{}
@@ -87,7 +88,7 @@ func Set(conn net.Conn, msg string, args []string) {
 		wrongNumberArgs(conn, "set")
 	} else {
 		db[args[0]] = args[1]
-		conn.Write([]byte("OK\n"))
+		OKReply(conn)
 	}
 }
 
@@ -124,6 +125,17 @@ func Exists(conn net.Conn, msg string, args []string) {
 		}
 		conn.Write([]byte(fmt.Sprintf("%d\n", count)))
 	}
+}
+
+
+// Quit closes the connection. https://redis.io/commands/quit/
+func Quit(conn net.Conn, msg string, args []string) {
+	OKReply(conn)
+	conn.Close()
+}
+
+func OKReply(conn net.Conn) {
+	conn.Write([]byte("OK\n"))
 }
 
 func wrongNumberArgs(conn net.Conn, name string) {
