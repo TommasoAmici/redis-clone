@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -31,9 +32,10 @@ func main() {
 }
 
 var handlers = map[string]func(conn net.Conn, message string, args []string){
-	"ping": Ping,
-	"set":  Set,
-	"get":  Get,
+	"ping":   Ping,
+	"set":    Set,
+	"get":    Get,
+	"exists": Exists,
 }
 
 var db = map[string]string{}
@@ -103,6 +105,24 @@ func Get(conn net.Conn, msg string, args []string) {
 		} else {
 			conn.Write([]byte("-1\n"))
 		}
+	}
+}
+
+// Exists returns a value if `key` exists.
+// The user should be aware that if the same existing `key` is mentioned in the arguments
+// multiple times, it will be counted multiple times. So if `somekey` exists, `EXIST somekey somekey` will return 2.
+// https://redis.io/commands/exists/
+func Exists(conn net.Conn, msg string, args []string) {
+	if len(args) == 0 {
+		wrongNumberArgs(conn, "exists")
+	} else {
+		count := 0
+		for _, arg := range args {
+			if db[arg] != "" {
+				count++
+			}
+		}
+		conn.Write([]byte(fmt.Sprintf("%d\n", count)))
 	}
 }
 
