@@ -35,6 +35,7 @@ var handlers = map[string]func(conn net.Conn, message string, args []string){
 	"ping":   Ping,
 	"set":    Set,
 	"get":    Get,
+	"del":    Del,
 	"exists": Exists,
 	"quit":   Quit,
 }
@@ -123,15 +124,36 @@ func Exists(conn net.Conn, msg string, args []string) {
 				count++
 			}
 		}
-		conn.Write([]byte(fmt.Sprintf("%d\n", count)))
+		intReply(conn, count)
 	}
 }
 
+// Del removes the specified keys. A key is ignored if it does not exist.
+// Returns Integer reply: The number of keys that were removed.
+// https://redis.io/commands/del/
+func Del(conn net.Conn, msg string, args []string) {
+	if len(args) == 0 {
+		wrongNumberArgs(conn, "del")
+	} else {
+		count := 0
+		for _, arg := range args {
+			if db[arg] != "" {
+				delete(db, arg)
+				count++
+			}
+		}
+		intReply(conn, count)
+	}
+}
 
 // Quit closes the connection. https://redis.io/commands/quit/
 func Quit(conn net.Conn, msg string, args []string) {
 	OKReply(conn)
 	conn.Close()
+}
+
+func intReply(conn net.Conn, n int) {
+	conn.Write([]byte(fmt.Sprintf("%d\n", n)))
 }
 
 func OKReply(conn net.Conn) {
