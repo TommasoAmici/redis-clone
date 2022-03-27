@@ -31,15 +31,6 @@ func main() {
 	}
 }
 
-var handlers = map[string]func(conn net.Conn, message string, args []string){
-	"ping":   Ping,
-	"set":    Set,
-	"get":    Get,
-	"del":    Del,
-	"exists": Exists,
-	"quit":   Quit,
-}
-
 type Storage struct {
 	mu sync.Mutex
 	v  map[string]string
@@ -57,19 +48,43 @@ func handleConnection(conn net.Conn) {
 		if err != nil || msg == "" {
 			return
 		}
-		log.Println("[INFO] Message Received:", msg)
-
-		msg = strings.TrimSpace(msg)
-		split := strings.Split(msg, " ")
-		command := strings.ToLower(split[0])
-		args := split[1:]
-
-		handler, ok := handlers[command]
-		if !ok {
-			return
+		if msg[0] == '*' {
+			// TODO implement unified request protocol
+			log.Println("[ERROR] unified request protocol is not supported yet")
+		} else {
+			log.Println("[INFO] inline command received:", msg)
+			handleInlineCommand(conn, msg)
 		}
-		handler(conn, msg, args)
 	}
+}
+
+var handlers = map[string]func(conn net.Conn, message string, args []string){
+	"ping":   Ping,
+	"set":    Set,
+	"get":    Get,
+	"del":    Del,
+	"exists": Exists,
+	"quit":   Quit,
+}
+
+// While the Redis protocol is simple to implement, it is not ideal to use in interactive
+// sessions, and redis-cli may not always be available. For this reason, Redis also
+// accepts commands in the inline command format.
+// Basically, you write space-separated arguments in a telnet session. Since no command
+// starts with * that is instead used in the unified request protocol, Redis is able to
+// detect this condition and parse your command.
+// https://redis.io/docs/reference/protocol-spec/#inline-commands
+func handleInlineCommand(conn net.Conn, msg string) {
+	msg = strings.TrimSpace(msg)
+	split := strings.Split(msg, " ")
+	command := strings.ToLower(split[0])
+	args := split[1:]
+
+	handler, ok := handlers[command]
+	if !ok {
+		return
+	}
+	handler(conn, msg, args)
 }
 
 // Ping returns PONG if no argument is provided, otherwise return a copy of the argument as a bulk.
