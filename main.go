@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 )
 
 func main() {
@@ -39,7 +40,12 @@ var handlers = map[string]func(conn net.Conn, message string, args []string){
 	"quit":   Quit,
 }
 
-var db = map[string]string{}
+type Storage struct {
+	mu sync.Mutex
+	v  map[string]string
+}
+
+var db = Storage{v: make(map[string]string)}
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
@@ -87,7 +93,9 @@ func Set(conn net.Conn, msg string, args []string) {
 	if len(args) != 2 {
 		wrongNumArgsRESP(conn, "set")
 	} else {
-		db[args[0]] = args[1]
+		db.mu.Lock()
+		db.v[args[0]] = args[1]
+		db.mu.Unlock()
 		okRESP(conn)
 	}
 }
@@ -100,12 +108,14 @@ func Get(conn net.Conn, msg string, args []string) {
 	if len(args) != 1 {
 		wrongNumArgsRESP(conn, "get")
 	} else {
-		val, ok := db[args[0]]
+		db.mu.Lock()
+		val, ok := db.v[args[0]]
 		if ok {
 			bulkStringRESP(conn, val)
 		} else {
 			nullBulkRESP(conn)
 		}
+		db.mu.Unlock()
 	}
 }
 
@@ -118,11 +128,13 @@ func Exists(conn net.Conn, msg string, args []string) {
 		wrongNumArgsRESP(conn, "exists")
 	} else {
 		count := 0
+		db.mu.Lock()
 		for _, arg := range args {
-			if db[arg] != "" {
+			if db.v[arg] != "" {
 				count++
 			}
 		}
+		db.mu.Unlock()
 		intRESP(conn, count)
 	}
 }
@@ -135,12 +147,14 @@ func Del(conn net.Conn, msg string, args []string) {
 		wrongNumArgsRESP(conn, "del")
 	} else {
 		count := 0
+		db.mu.Lock()
 		for _, arg := range args {
-			if db[arg] != "" {
-				delete(db, arg)
+			if db.v[arg] != "" {
+				delete(db.v, arg)
 				count++
 			}
 		}
+		db.mu.Unlock()
 		intRESP(conn, count)
 	}
 }
