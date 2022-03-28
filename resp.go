@@ -59,7 +59,7 @@ func nullBulkRESP(conn net.Conn) {
 // as exceptions, and the string that composes the Error type is the error message itself.
 // https://redis.io/docs/reference/protocol-spec/#resp-errors
 func errRESP(conn net.Conn, msg string) {
-	conn.Write([]byte(fmt.Sprintf("%c%s\r\n", RESP_INT, msg)))
+	conn.Write([]byte(fmt.Sprintf("%c%s\r\n", RESP_ERROR, msg)))
 }
 
 func wrongNumArgsRESP(conn net.Conn, name string) {
