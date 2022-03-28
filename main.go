@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -49,10 +50,8 @@ func handleConnection(conn net.Conn) {
 			return
 		}
 		if msg[0] == '*' {
-			// TODO implement unified request protocol
-			log.Println("[ERROR] unified request protocol is not supported yet")
+			handleURP(reader, conn, msg)
 		} else {
-			log.Println("[INFO] inline command received:", msg)
 			handleInlineCommand(conn, msg)
 		}
 	}
@@ -74,6 +73,51 @@ func handleCommand(conn net.Conn, command string, args []string) {
 	}
 	handler(conn, args)
 }
+
+// A client sends the Redis server a RESP Array consisting of only Bulk Strings.
+// A Redis server replies to clients, sending any valid RESP data type as a reply.
+// So for example a typical interaction could be the following.
+// The client sends the command `LLEN mylist` in order to get the length of the list
+// stored at key `mylist`. Then the server replies with an Integer reply as in the
+// following example (C: is the client, S: the server).
+//     C: *2\r\n
+//     C: $4\r\n
+//     C: LLEN\r\n
+//     C: $6\r\n
+//     C: mylist\r\n
+//     S: :48293\r\n
+// As usual, we separate different parts of the protocol with newlines for simplicity,
+// but the actual interaction is the client sending
+//     *2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n.
+// https://redis.io/docs/reference/protocol-spec/#send-commands-to-a-redis-server
+func handleURP(reader *bufio.Reader, conn net.Conn, msg string) {
+	arrayLen, err := strconv.Atoi(strings.TrimSpace(msg[1:]))
+	if err != nil {
+		log.Println("[ERROR]", err)
+		return
+	}
+	args := []string{}
+	for arrayLen > 0 {
+		_, err = reader.ReadString('\n')
+		if err != nil {
+			log.Println("[ERROR]", err)
+			return
+		}
+		arg, err := reader.ReadString('\n')
+		if err != nil {
+			log.Println("[ERROR]", err)
+			return
+		}
+		args = append(args, strings.TrimSpace(arg))
+		arrayLen--
+	}
+	log.Println("[INFO] unified request protocol received", args)
+
+	command := args[0]
+	args = args[1:]
+	handleCommand(conn, command, args)
+}
+
 // While the Redis protocol is simple to implement, it is not ideal to use in interactive
 // sessions, and redis-cli may not always be available. For this reason, Redis also
 // accepts commands in the inline command format.
@@ -82,6 +126,8 @@ func handleCommand(conn net.Conn, command string, args []string) {
 // detect this condition and parse your command.
 // https://redis.io/docs/reference/protocol-spec/#inline-commands
 func handleInlineCommand(conn net.Conn, msg string) {
+	log.Println("[INFO] inline command received:", msg)
+
 	msg = strings.TrimSpace(msg)
 	split := strings.Split(msg, " ")
 	command := strings.ToLower(split[0])
