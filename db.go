@@ -11,6 +11,33 @@ type Database struct {
 	v  map[string]string
 }
 
+// Read securely from Database
+func (db *Database) Read(key string) (v string, ok bool) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	v, ok = db.v[key]
+	return
+}
+
+// Write securely to Database
+func (db *Database) Write(key string, value string) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	db.v[key] = value
+	return
+}
+
+// Delete securely from Database
+func (db *Database) Delete(key string) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	delete(db.v, key)
+	return
+}
+
 type DatabaseMap = map[string]*Database
 
 var databases = make(DatabaseMap)
@@ -40,31 +67,19 @@ func (db *SelectedDatabases) GetDB(conn net.Conn) *Database {
 // Read securely from Database
 func (db *SelectedDatabases) Read(conn net.Conn, key string) (v string, ok bool) {
 	d := db.GetDB(conn)
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-
-	v, ok = d.v[key]
-	return
+	return d.Read(key)
 }
 
 // Write securely to Database
 func (db *SelectedDatabases) Write(conn net.Conn, key string, value string) {
 	d := db.GetDB(conn)
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	d.v[key] = value
-	return
+	d.Write(key, value)
 }
 
 // Delete securely from Database
 func (db *SelectedDatabases) Delete(conn net.Conn, key string) {
 	d := db.GetDB(conn)
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	delete(d.v, key)
-	return
+	d.Delete(key)
 }
 
 func initDB(n int) {
