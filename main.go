@@ -242,6 +242,7 @@ func Select(conn net.Conn, args []string) {
 // destination database. When `key` already exists in the destination database, or it
 // does not exist in the source database, it does nothing.
 // It is possible to use `MOVE` as a locking primitive because of this.
+// https://redis.io/commands/move/
 func Move(conn net.Conn, args []string) {
 	if len(args) != 2 {
 		wrongNumArgsRESP(conn, "move")
@@ -289,6 +290,7 @@ func RandomKey(conn net.Conn, args []string) {
 }
 
 // DBSize returns the number of keys in the currently-selected database.
+// https://redis.io/commands/dbsize/
 func DBSize(conn net.Conn, args []string) {
 	if len(args) != 0 {
 		wrongNumArgsRESP(conn, "dbsize")
