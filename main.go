@@ -58,7 +58,7 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-var handlers = map[string]func(conn net.Conn, message string, args []string){
+var commandMap = map[string]func(conn net.Conn, args []string){
 	"ping":   Ping,
 	"set":    Set,
 	"get":    Get,
@@ -67,6 +67,13 @@ var handlers = map[string]func(conn net.Conn, message string, args []string){
 	"quit":   Quit,
 }
 
+func handleCommand(conn net.Conn, command string, args []string) {
+	handler, ok := commandMap[command]
+	if !ok {
+		return
+	}
+	handler(conn, args)
+}
 // While the Redis protocol is simple to implement, it is not ideal to use in interactive
 // sessions, and redis-cli may not always be available. For this reason, Redis also
 // accepts commands in the inline command format.
@@ -80,17 +87,13 @@ func handleInlineCommand(conn net.Conn, msg string) {
 	command := strings.ToLower(split[0])
 	args := split[1:]
 
-	handler, ok := handlers[command]
-	if !ok {
-		return
-	}
-	handler(conn, msg, args)
+	handleCommand(conn, command, args)
 }
 
 // Ping returns PONG if no argument is provided, otherwise return a copy of the argument as a bulk.
 // This command is often used to test if a connection is still alive, or to measure latency.
 // https://redis.io/commands/ping/
-func Ping(conn net.Conn, msg string, args []string) {
+func Ping(conn net.Conn, args []string) {
 	if len(args) == 0 {
 		simpleStringRESP(conn, "PONG")
 	} else if len(args) == 1 {
@@ -104,7 +107,7 @@ func Ping(conn net.Conn, msg string, args []string) {
 // regardless of its type. Any previous time to live associated with the `key` is
 // discarded on successful `SET` operation.
 // https://redis.io/commands/set/
-func Set(conn net.Conn, msg string, args []string) {
+func Set(conn net.Conn, args []string) {
 	if len(args) != 2 {
 		wrongNumArgsRESP(conn, "set")
 	} else {
@@ -119,7 +122,7 @@ func Set(conn net.Conn, msg string, args []string) {
 // An error is returned if the value stored at `key` is not a string, because `GET` only
 // handles string values.
 // https://redis.io/commands/get/
-func Get(conn net.Conn, msg string, args []string) {
+func Get(conn net.Conn, args []string) {
 	if len(args) != 1 {
 		wrongNumArgsRESP(conn, "get")
 	} else {
@@ -138,7 +141,7 @@ func Get(conn net.Conn, msg string, args []string) {
 // The user should be aware that if the same existing `key` is mentioned in the arguments
 // multiple times, it will be counted multiple times. So if `somekey` exists, `EXIST somekey somekey` will return 2.
 // https://redis.io/commands/exists/
-func Exists(conn net.Conn, msg string, args []string) {
+func Exists(conn net.Conn, args []string) {
 	if len(args) == 0 {
 		wrongNumArgsRESP(conn, "exists")
 	} else {
@@ -157,7 +160,7 @@ func Exists(conn net.Conn, msg string, args []string) {
 // Del removes the specified keys. A key is ignored if it does not exist.
 // Returns Integer reply: The number of keys that were removed.
 // https://redis.io/commands/del/
-func Del(conn net.Conn, msg string, args []string) {
+func Del(conn net.Conn, args []string) {
 	if len(args) == 0 {
 		wrongNumArgsRESP(conn, "del")
 	} else {
@@ -175,7 +178,7 @@ func Del(conn net.Conn, msg string, args []string) {
 }
 
 // Quit closes the connection. https://redis.io/commands/quit/
-func Quit(conn net.Conn, msg string, args []string) {
+func Quit(conn net.Conn, args []string) {
 	okRESP(conn)
 	conn.Close()
 }
