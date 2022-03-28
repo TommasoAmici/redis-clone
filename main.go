@@ -53,16 +53,17 @@ func handleConnection(conn net.Conn) {
 }
 
 var commandMap = map[string]func(conn net.Conn, args []string){
-	"ping":   Ping,
-	"echo":   Echo,
-	"set":    Set,
-	"get":    Get,
-	"del":    Del,
-	"exists": Exists,
-	"select": Select,
-	"move":   Move,
-	"dbsize": DBSize,
-	"quit":   Quit,
+	"ping":      Ping,
+	"echo":      Echo,
+	"set":       Set,
+	"get":       Get,
+	"randomkey": RandomKey,
+	"del":       Del,
+	"exists":    Exists,
+	"select":    Select,
+	"move":      Move,
+	"dbsize":    DBSize,
+	"quit":      Quit,
 }
 
 func handleCommand(conn net.Conn, command string, args []string) {
@@ -267,6 +268,24 @@ func Move(conn net.Conn, args []string) {
 	go newDB.Write(key, value)
 	go selectedDB.Delete(conn, key)
 	intRESP(conn, 1)
+}
+
+// RandomKey returns a random key from the currently selected database.
+// This function relies on the fact that Go iterates randomly over maps https://go.dev/doc/go1#iteration.
+// https://redis.io/commands/randomkey/
+func RandomKey(conn net.Conn, args []string) {
+	if len(args) != 0 {
+		wrongNumArgsRESP(conn, "randomkey")
+	} else {
+		d := selectedDB.GetDB(conn)
+		d.mu.RLock()
+		defer d.mu.RUnlock()
+
+		for k := range d.v {
+			bulkStringRESP(conn, k)
+			return
+		}
+	}
 }
 
 // DBSize returns the number of keys in the currently-selected database.
