@@ -231,8 +231,8 @@ func DBSize(conn net.Conn, args []string) {
 		wrongNumArgsRESP(conn, "dbsize")
 	} else {
 		d := selectedDB.GetDB(conn)
-		d.mu.Lock()
-		defer d.mu.Unlock()
+		d.mu.RLock()
+		defer d.mu.RUnlock()
 
 		size := len(d.v)
 		intRESP(conn, size)

@@ -7,7 +7,7 @@ import (
 )
 
 type Database struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 	v  map[string]string
 }
 
@@ -16,7 +16,7 @@ type DatabaseMap = map[string]*Database
 var databases = make(DatabaseMap)
 
 type SelectedDatabases struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 	v  DatabaseMap
 }
 
@@ -26,8 +26,8 @@ var selectedDB = SelectedDatabases{
 }
 
 func (db *SelectedDatabases) GetDB(conn net.Conn) *Database {
-	db.mu.Lock()
-	defer db.mu.Unlock()
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 
 	d, ok := db.v[conn.RemoteAddr().String()]
 	if ok {
@@ -40,8 +40,8 @@ func (db *SelectedDatabases) GetDB(conn net.Conn) *Database {
 // Read securely from Database
 func (db *SelectedDatabases) Read(conn net.Conn, key string) (v string, ok bool) {
 	d := db.GetDB(conn)
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 
 	v, ok = d.v[key]
 	return
