@@ -59,6 +59,7 @@ var commandMap = map[string]func(conn net.Conn, args []string){
 	"del":    Del,
 	"exists": Exists,
 	"select": Select,
+	"dbsize": DBSize,
 	"quit":   Quit,
 }
 
@@ -221,6 +222,20 @@ func Select(conn net.Conn, args []string) {
 		selectedDB.v[conn.RemoteAddr().String()] = databases[args[0]]
 		selectedDB.mu.Unlock()
 		okRESP(conn)
+	}
+}
+
+// DBSize returns the number of keys in the currently-selected database.
+func DBSize(conn net.Conn, args []string) {
+	if len(args) != 0 {
+		wrongNumArgsRESP(conn, "dbsize")
+	} else {
+		d := selectedDB.GetDB(conn)
+		d.mu.Lock()
+		defer d.mu.Unlock()
+
+		size := len(d.v)
+		intRESP(conn, size)
 	}
 }
 
