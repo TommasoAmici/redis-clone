@@ -140,7 +140,7 @@ func Ping(conn net.Conn, args []string) {
 	if len(args) == 0 {
 		simpleStringRESP(conn, "PONG")
 	} else if len(args) == 1 {
-		simpleStringRESP(conn, args[0])
+		bulkStringRESP(conn, args[0])
 	} else {
 		wrongNumArgsRESP(conn, "ping")
 	}
