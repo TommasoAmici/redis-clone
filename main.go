@@ -54,6 +54,7 @@ func handleConnection(conn net.Conn) {
 
 var commandMap = map[string]func(conn net.Conn, args []string){
 	"ping":   Ping,
+	"echo":   Echo,
 	"set":    Set,
 	"get":    Get,
 	"del":    Del,
@@ -144,6 +145,16 @@ func Ping(conn net.Conn, args []string) {
 	} else {
 		wrongNumArgsRESP(conn, "ping")
 	}
+}
+
+// Echo `message` returns `message`.
+// https://redis.io/commands/echo/
+func Echo(conn net.Conn, args []string) {
+	if len(args) != 1 {
+		wrongNumArgsRESP(conn, "echo")
+		return
+	}
+	bulkStringRESP(conn, args[0])
 }
 
 // Set `key` to hold the string value. If `key` already holds a value, it is overwritten,
