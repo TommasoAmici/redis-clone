@@ -7,13 +7,15 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 func main() {
 	network := flag.String("network", "tcp", `The network must be "tcp", "tcp4", "tcp6", "unix" or "unixpacket".`)
 	addr := flag.String("address", "127.0.0.1:6379", "Address to listen on")
+	dbNum := flag.Int("db-num", 16, "Number of databases to create")
 	flag.Parse()
+
+	initDB(*dbNum)
 
 	ln, err := net.Listen(*network, *addr)
 	if err != nil {
@@ -31,13 +33,6 @@ func main() {
 		go handleConnection(conn)
 	}
 }
-
-type Storage struct {
-	mu sync.Mutex
-	v  map[string]string
-}
-
-var db = Storage{v: make(map[string]string)}
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
@@ -63,6 +58,7 @@ var commandMap = map[string]func(conn net.Conn, args []string){
 	"get":    Get,
 	"del":    Del,
 	"exists": Exists,
+	"select": Select,
 	"quit":   Quit,
 }
 
@@ -157,9 +153,7 @@ func Set(conn net.Conn, args []string) {
 	if len(args) != 2 {
 		wrongNumArgsRESP(conn, "set")
 	} else {
-		db.mu.Lock()
-		db.v[args[0]] = args[1]
-		db.mu.Unlock()
+		selectedDB.Write(conn, args[0], args[1])
 		okRESP(conn)
 	}
 }
@@ -172,14 +166,12 @@ func Get(conn net.Conn, args []string) {
 	if len(args) != 1 {
 		wrongNumArgsRESP(conn, "get")
 	} else {
-		db.mu.Lock()
-		val, ok := db.v[args[0]]
+		val, ok := selectedDB.Read(conn, args[0])
 		if ok {
 			bulkStringRESP(conn, val)
 		} else {
 			nullBulkRESP(conn)
 		}
-		db.mu.Unlock()
 	}
 }
 
@@ -192,13 +184,11 @@ func Exists(conn net.Conn, args []string) {
 		wrongNumArgsRESP(conn, "exists")
 	} else {
 		count := 0
-		db.mu.Lock()
 		for _, arg := range args {
-			if db.v[arg] != "" {
+			if v, _ := selectedDB.Read(conn, arg); v != "" {
 				count++
 			}
 		}
-		db.mu.Unlock()
 		intRESP(conn, count)
 	}
 }
@@ -211,20 +201,34 @@ func Del(conn net.Conn, args []string) {
 		wrongNumArgsRESP(conn, "del")
 	} else {
 		count := 0
-		db.mu.Lock()
 		for _, arg := range args {
-			if db.v[arg] != "" {
-				delete(db.v, arg)
+			if v, _ := selectedDB.Read(conn, arg); v != "" {
+				selectedDB.Delete(conn, arg)
 				count++
 			}
 		}
-		db.mu.Unlock()
 		intRESP(conn, count)
+	}
+}
+
+// Select the Redis logical database having the specified zero-based numeric index.
+// New connections always use the database 0. https://redis.io/commands/select/
+func Select(conn net.Conn, args []string) {
+	if len(args) != 1 {
+		wrongNumArgsRESP(conn, "select")
+	} else {
+		selectedDB.mu.Lock()
+		selectedDB.v[conn.RemoteAddr().String()] = databases[args[0]]
+		selectedDB.mu.Unlock()
+		okRESP(conn)
 	}
 }
 
 // Quit closes the connection. https://redis.io/commands/quit/
 func Quit(conn net.Conn, args []string) {
+	selectedDB.mu.Lock()
+	delete(selectedDB.v, conn.RemoteAddr().String())
+	selectedDB.mu.Unlock()
 	okRESP(conn)
 	conn.Close()
 }
