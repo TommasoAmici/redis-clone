@@ -65,6 +65,17 @@ func (db *Database) Delete(key DBKey) {
 	return
 }
 
+// Flush deletes all the keys of the Database
+func (db *Database) Flush() {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	db.container = make(map[DBKey]string)
+	db.keys = []DBKey{}
+	db.keyIndex = make(map[DBKey]int)
+	return
+}
+
 func (db *Database) RandomKey() (key DBKey) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -116,6 +127,12 @@ func (db *SelectedDatabases) Write(conn net.Conn, key DBKey, value string) {
 func (db *SelectedDatabases) Delete(conn net.Conn, key DBKey) {
 	d := db.GetDB(conn)
 	d.Delete(key)
+}
+
+// Flush deletes all the keys of the currently selected DB
+func (db *SelectedDatabases) Flush(conn net.Conn) {
+	d := db.GetDB(conn)
+	d.Flush()
 }
 
 // Size returns the number of keys stored in the selected database

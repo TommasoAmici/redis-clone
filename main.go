@@ -63,6 +63,7 @@ var commandMap = map[string]func(conn net.Conn, args []string){
 	"select":    Select,
 	"move":      Move,
 	"dbsize":    DBSize,
+	"flushdb":   FlushDB,
 	"quit":      Quit,
 }
 
@@ -290,6 +291,15 @@ func DBSize(conn net.Conn, args []string) {
 		wrongNumArgsRESP(conn, "dbsize")
 	} else {
 		intRESP(conn, selectedDB.Size(conn))
+	}
+}
+
+func FlushDB(conn net.Conn, args []string) {
+	if len(args) != 0 {
+		wrongNumArgsRESP(conn, "flushdb")
+	} else {
+		selectedDB.Flush(conn)
+		okRESP(conn)
 	}
 }
 
