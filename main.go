@@ -64,6 +64,7 @@ var commandMap = map[string]func(conn net.Conn, args []string){
 	"move":      Move,
 	"dbsize":    DBSize,
 	"flushdb":   FlushDB,
+	"flushall":  FlushAll,
 	"quit":      Quit,
 }
 
@@ -299,6 +300,20 @@ func FlushDB(conn net.Conn, args []string) {
 		wrongNumArgsRESP(conn, "flushdb")
 	} else {
 		selectedDB.Flush(conn)
+		okRESP(conn)
+	}
+}
+
+// FlushAll delete all the keys of all the existing databases, not just
+// the currently selected one.
+// https://redis.io/commands/flushall/
+func FlushAll(conn net.Conn, args []string) {
+	if len(args) != 0 {
+		wrongNumArgsRESP(conn, "flushall")
+	} else {
+		for _, d := range databases {
+			d.Flush()
+		}
 		okRESP(conn)
 	}
 }
