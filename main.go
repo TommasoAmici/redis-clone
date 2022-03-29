@@ -277,16 +277,10 @@ func Move(conn net.Conn, args []string) {
 func RandomKey(conn net.Conn, args []string) {
 	if len(args) != 0 {
 		wrongNumArgsRESP(conn, "randomkey")
-	} else {
-		d := selectedDB.GetDB(conn)
-		d.mu.RLock()
-		defer d.mu.RUnlock()
-
-		for k := range d.v {
-			bulkStringRESP(conn, k)
-			return
-		}
+		return
 	}
+
+	bulkStringRESP(conn, selectedDB.RandomKey(conn))
 }
 
 // DBSize returns the number of keys in the currently-selected database.
@@ -295,12 +289,7 @@ func DBSize(conn net.Conn, args []string) {
 	if len(args) != 0 {
 		wrongNumArgsRESP(conn, "dbsize")
 	} else {
-		d := selectedDB.GetDB(conn)
-		d.mu.RLock()
-		defer d.mu.RUnlock()
-
-		size := len(d.v)
-		intRESP(conn, size)
+		intRESP(conn, selectedDB.Size(conn))
 	}
 }
 
