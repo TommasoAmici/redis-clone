@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"strconv"
 	"sync"
 )
 
@@ -147,6 +148,19 @@ func (db *SelectedDatabases) Size(conn net.Conn) int {
 func (db *SelectedDatabases) RandomKey(conn net.Conn) DBKey {
 	d := db.GetDB(conn)
 	return d.RandomKey()
+}
+
+func (db *SelectedDatabases) ReadInt(conn net.Conn, key DBKey) (int, error) {
+	d := db.GetDB(conn)
+	v, ok := d.Read(key)
+	if !ok {
+		return 0, KeyDoesNotExist
+	}
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, err
+	}
+	return i, nil
 }
 
 func initDB(n int) {

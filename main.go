@@ -2,8 +2,8 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"strconv"
@@ -53,8 +53,6 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-var wrongNumArgsError = errors.New("wrong number of arguments")
-
 var commandMap = map[string]func(conn net.Conn, args []string) error{
 	"ping":      Ping,
 	"echo":      Echo,
@@ -63,6 +61,10 @@ var commandMap = map[string]func(conn net.Conn, args []string) error{
 	"randomkey": RandomKey,
 	"del":       Del,
 	"exists":    Exists,
+	"decr":      IncrDecrGenerator(DirDecr, false),
+	"decrby":    IncrDecrGenerator(DirDecr, true),
+	"incr":      IncrDecrGenerator(DirIncr, false),
+	"incrby":    IncrDecrGenerator(DirIncr, true),
 	"select":    Select,
 	"move":      Move,
 	"dbsize":    DBSize,
@@ -291,6 +293,90 @@ func RandomKey(conn net.Conn, args []string) error {
 
 	bulkStringRESP(conn, selectedDB.RandomKey(conn))
 	return nil
+}
+
+const (
+	DirIncr = iota
+	DirDecr
+)
+
+// Increments or decrements the number stored at key by one or by the value provided.
+// If the key does not exist, it is set to 0 before performing the operation.
+// An error is returned if the key contains a value of the wrong type or contains a
+// string that can not be represented as integer. This operation is limited to 64 bit signed integers.
+// Note: this is a string operation because Redis does not have a dedicated integer type.
+// The string stored at the key is interpreted as a base-10 64 bit signed integer to
+// execute the operation.
+// Redis stores integers in their integer representation, so for string values that
+// actually hold an integer, there is no overhead for storing the string representation
+// of the integer.
+// https://redis.io/commands/incr/
+// https://redis.io/commands/decr/
+// https://redis.io/commands/incrby/
+// https://redis.io/commands/decrby/
+func IncrDecrGenerator(dir int, by bool) func(conn net.Conn, args []string) error {
+	var sum func(a, b int) int
+
+	if dir == DirDecr {
+		sum = func(a, b int) int {
+			return a - b
+		}
+	} else {
+		sum = func(a, b int) int {
+			return a + b
+		}
+	}
+
+	// DECRBY and INCRBY accept two arguments
+	numArgs := 1
+	if by {
+		numArgs = 2
+	}
+
+	return func(conn net.Conn, args []string) error {
+		if len(args) != numArgs {
+			return wrongNumArgsError
+		}
+
+		key := args[0]
+
+		val, err := selectedDB.ReadInt(conn, key)
+		if err != nil {
+			if err == KeyDoesNotExist {
+				var v int
+				if by {
+					v, err = strconv.Atoi(args[1])
+					if err != nil {
+						valueIsNotIntRESP(conn)
+						return nil
+					}
+				} else {
+					v = 1
+				}
+				selectedDB.Write(conn, key, fmt.Sprint(v))
+				intRESP(conn, v)
+				return nil
+			} else {
+				valueIsNotIntRESP(conn)
+				return nil
+			}
+		}
+
+		var v int
+		if by {
+			changeBy, err := strconv.Atoi(args[1])
+			if err != nil {
+				valueIsNotIntRESP(conn)
+				return nil
+			}
+			v = sum(val, changeBy)
+		} else {
+			v = sum(val, 1)
+		}
+		selectedDB.Write(conn, key, fmt.Sprint(v))
+		intRESP(conn, v)
+		return nil
+	}
 }
 
 // DBSize returns the number of keys in the currently-selected database.

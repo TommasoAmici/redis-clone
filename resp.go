@@ -65,3 +65,7 @@ func errRESP(conn net.Conn, msg string) {
 func wrongNumArgsRESP(conn net.Conn, name string) {
 	errRESP(conn, "ERR wrong number of arguments for '"+name+"' command")
 }
+
+func valueIsNotIntRESP(conn net.Conn) {
+	errRESP(conn, "ERR value is not an integer or out of range")
+}
