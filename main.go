@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"log"
 	"net"
@@ -52,7 +53,9 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-var commandMap = map[string]func(conn net.Conn, args []string){
+var wrongNumArgsError = errors.New("wrong number of arguments")
+
+var commandMap = map[string]func(conn net.Conn, args []string) error{
 	"ping":      Ping,
 	"echo":      Echo,
 	"set":       Set,
@@ -73,7 +76,10 @@ func handleCommand(conn net.Conn, command string, args []string) {
 	if !ok {
 		return
 	}
-	handler(conn, args)
+	err := handler(conn, args)
+	if err == wrongNumArgsError {
+		wrongNumArgsRESP(conn, command)
+	}
 }
 
 // A client sends the Redis server a RESP Array consisting of only Bulk Strings.
@@ -141,103 +147,105 @@ func handleInlineCommand(conn net.Conn, msg string) {
 // Ping returns PONG if no argument is provided, otherwise return a copy of the argument as a bulk.
 // This command is often used to test if a connection is still alive, or to measure latency.
 // https://redis.io/commands/ping/
-func Ping(conn net.Conn, args []string) {
+func Ping(conn net.Conn, args []string) error {
 	if len(args) == 0 {
 		simpleStringRESP(conn, "PONG")
 	} else if len(args) == 1 {
 		bulkStringRESP(conn, args[0])
 	} else {
-		wrongNumArgsRESP(conn, "ping")
+		return wrongNumArgsError
 	}
+	return nil
 }
 
 // Echo `message` returns `message`.
 // https://redis.io/commands/echo/
-func Echo(conn net.Conn, args []string) {
+func Echo(conn net.Conn, args []string) error {
 	if len(args) != 1 {
-		wrongNumArgsRESP(conn, "echo")
-		return
+		return wrongNumArgsError
 	}
 	bulkStringRESP(conn, args[0])
+	return nil
 }
 
 // Set `key` to hold the string value. If `key` already holds a value, it is overwritten,
 // regardless of its type. Any previous time to live associated with the `key` is
 // discarded on successful `SET` operation.
 // https://redis.io/commands/set/
-func Set(conn net.Conn, args []string) {
+func Set(conn net.Conn, args []string) error {
 	if len(args) != 2 {
-		wrongNumArgsRESP(conn, "set")
-	} else {
-		selectedDB.Write(conn, args[0], args[1])
-		okRESP(conn)
+		return wrongNumArgsError
 	}
+	selectedDB.Write(conn, args[0], args[1])
+	okRESP(conn)
+	return nil
 }
 
 // Get the value of `key`. If the `key`` does not exist the special value `nil` is returned.
 // An error is returned if the value stored at `key` is not a string, because `GET` only
 // handles string values.
 // https://redis.io/commands/get/
-func Get(conn net.Conn, args []string) {
+func Get(conn net.Conn, args []string) error {
 	if len(args) != 1 {
-		wrongNumArgsRESP(conn, "get")
-	} else {
-		val, ok := selectedDB.Read(conn, args[0])
-		if ok {
-			bulkStringRESP(conn, val)
-		} else {
-			nullBulkRESP(conn)
-		}
+		return wrongNumArgsError
 	}
+	val, ok := selectedDB.Read(conn, args[0])
+	if ok {
+		bulkStringRESP(conn, val)
+	} else {
+		nullBulkRESP(conn)
+	}
+	return nil
 }
 
 // Exists returns a value if `key` exists.
 // The user should be aware that if the same existing `key` is mentioned in the arguments
 // multiple times, it will be counted multiple times. So if `somekey` exists, `EXIST somekey somekey` will return 2.
 // https://redis.io/commands/exists/
-func Exists(conn net.Conn, args []string) {
+func Exists(conn net.Conn, args []string) error {
 	if len(args) == 0 {
-		wrongNumArgsRESP(conn, "exists")
-	} else {
-		count := 0
-		for _, arg := range args {
-			if v, _ := selectedDB.Read(conn, arg); v != "" {
-				count++
-			}
-		}
-		intRESP(conn, count)
+		return wrongNumArgsError
 	}
+	count := 0
+	for _, arg := range args {
+		if v, _ := selectedDB.Read(conn, arg); v != "" {
+			count++
+		}
+	}
+	intRESP(conn, count)
+	return nil
+
 }
 
 // Del removes the specified keys. A key is ignored if it does not exist.
 // Returns Integer reply: The number of keys that were removed.
 // https://redis.io/commands/del/
-func Del(conn net.Conn, args []string) {
+func Del(conn net.Conn, args []string) error {
 	if len(args) == 0 {
-		wrongNumArgsRESP(conn, "del")
-	} else {
-		count := 0
-		for _, arg := range args {
-			if v, _ := selectedDB.Read(conn, arg); v != "" {
-				selectedDB.Delete(conn, arg)
-				count++
-			}
-		}
-		intRESP(conn, count)
+		return wrongNumArgsError
 	}
+	count := 0
+	for _, arg := range args {
+		if v, _ := selectedDB.Read(conn, arg); v != "" {
+			selectedDB.Delete(conn, arg)
+			count++
+		}
+	}
+	intRESP(conn, count)
+	return nil
 }
 
 // Select the Redis logical database having the specified zero-based numeric index.
 // New connections always use the database 0. https://redis.io/commands/select/
-func Select(conn net.Conn, args []string) {
+func Select(conn net.Conn, args []string) error {
 	if len(args) != 1 {
-		wrongNumArgsRESP(conn, "select")
-	} else {
-		selectedDB.mu.Lock()
-		selectedDB.v[conn.RemoteAddr().String()] = databases[args[0]]
-		selectedDB.mu.Unlock()
-		okRESP(conn)
+		return wrongNumArgsError
 	}
+	selectedDB.mu.Lock()
+	selectedDB.v[conn.RemoteAddr().String()] = databases[args[0]]
+	selectedDB.mu.Unlock()
+	okRESP(conn)
+	return nil
 }
 
 // Move `key` from the currently selected database (see `SELECT`) to the specified
@@ -245,10 +253,9 @@ func Select(conn net.Conn, args []string) {
 // does not exist in the source database, it does nothing.
 // It is possible to use `MOVE` as a locking primitive because of this.
 // https://redis.io/commands/move/
-func Move(conn net.Conn, args []string) {
+func Move(conn net.Conn, args []string) error {
 	if len(args) != 2 {
-		wrongNumArgsRESP(conn, "move")
-		return
+		return wrongNumArgsError
 	}
 
 	key := args[0]
@@ -256,73 +263,76 @@ func Move(conn net.Conn, args []string) {
 	value, ok := selectedDB.Read(conn, key)
 	if !ok {
 		intRESP(conn, 0)
-		return
+		return nil
 	}
 	newDB, ok := databases[dbIdx]
 	if !ok {
 		errRESP(conn, "ERR DB index is out of range")
-		return
+		return nil
 	}
 	_, ok = newDB.Read(key)
 	if ok {
 		intRESP(conn, 0)
-		return
+		return nil
 	}
 	go newDB.Write(key, value)
 	go selectedDB.Delete(conn, key)
 	intRESP(conn, 1)
+	return nil
 }
 
 // RandomKey returns a random key from the currently selected database.
 // This function relies on the fact that Go iterates randomly over maps https://go.dev/doc/go1#iteration.
 // https://redis.io/commands/randomkey/
-func RandomKey(conn net.Conn, args []string) {
+func RandomKey(conn net.Conn, args []string) error {
 	if len(args) != 0 {
-		wrongNumArgsRESP(conn, "randomkey")
-		return
+		return wrongNumArgsError
 	}
 
 	bulkStringRESP(conn, selectedDB.RandomKey(conn))
+	return nil
 }
 
 // DBSize returns the number of keys in the currently-selected database.
 // https://redis.io/commands/dbsize/
-func DBSize(conn net.Conn, args []string) {
+func DBSize(conn net.Conn, args []string) error {
 	if len(args) != 0 {
 		wrongNumArgsRESP(conn, "dbsize")
-	} else {
-		intRESP(conn, selectedDB.Size(conn))
+		return wrongNumArgsError
 	}
+	intRESP(conn, selectedDB.Size(conn))
+	return nil
 }
 
-func FlushDB(conn net.Conn, args []string) {
+func FlushDB(conn net.Conn, args []string) error {
 	if len(args) != 0 {
-		wrongNumArgsRESP(conn, "flushdb")
-	} else {
-		selectedDB.Flush(conn)
-		okRESP(conn)
+		return wrongNumArgsError
 	}
+	selectedDB.Flush(conn)
+	okRESP(conn)
+	return nil
 }
 
 // FlushAll delete all the keys of all the existing databases, not just
 // the currently selected one.
 // https://redis.io/commands/flushall/
-func FlushAll(conn net.Conn, args []string) {
+func FlushAll(conn net.Conn, args []string) error {
 	if len(args) != 0 {
-		wrongNumArgsRESP(conn, "flushall")
-	} else {
-		for _, d := range databases {
-			d.Flush()
-		}
-		okRESP(conn)
+		return wrongNumArgsError
 	}
+	for _, d := range databases {
+		d.Flush()
+	}
+	okRESP(conn)
+	return nil
 }
 
 // Quit closes the connection. https://redis.io/commands/quit/
-func Quit(conn net.Conn, args []string) {
+func Quit(conn net.Conn, args []string) error {
 	selectedDB.mu.Lock()
 	delete(selectedDB.v, conn.RemoteAddr().String())
 	selectedDB.mu.Unlock()
 	okRESP(conn)
 	conn.Close()
+	return nil
 }
