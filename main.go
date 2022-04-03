@@ -54,23 +54,23 @@ func handleConnection(conn net.Conn) {
 }
 
 var commandMap = map[string]func(conn net.Conn, args []string) error{
-	"ping":      Ping,
-	"echo":      Echo,
-	"set":       Set,
-	"get":       Get,
-	"randomkey": RandomKey,
-	"del":       Del,
-	"exists":    Exists,
+	"dbsize":    DBSize,
 	"decr":      IncrDecrGenerator(DirDecr, false),
 	"decrby":    IncrDecrGenerator(DirDecr, true),
+	"del":       Del,
+	"echo":      Echo,
+	"exists":    Exists,
+	"flushall":  FlushAll,
+	"flushdb":   FlushDB,
+	"get":       Get,
 	"incr":      IncrDecrGenerator(DirIncr, false),
 	"incrby":    IncrDecrGenerator(DirIncr, true),
-	"select":    Select,
 	"move":      Move,
-	"dbsize":    DBSize,
-	"flushdb":   FlushDB,
-	"flushall":  FlushAll,
+	"ping":      Ping,
 	"quit":      Quit,
+	"randomkey": RandomKey,
+	"select":    Select,
+	"set":       Set,
 }
 
 func handleCommand(conn net.Conn, command string, args []string) {
